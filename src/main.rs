@@ -5,10 +5,12 @@ use log::LevelFilter;
 use clap::App;
 use fern;
 use itertools::Itertools;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use std::time::SystemTime;
 
 pub mod bam;
 pub mod bcf;
@@ -76,6 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let fasta_path = matches.value_of("fasta").unwrap();
             let detail_path = output_path.to_owned() + "/details/";
             fs::create_dir(Path::new(&detail_path))?;
+
+            let mut pairs = Vec::new();
             for (vcf, bam) in matches
                 .values_of("vcf-bam-pairs")
                 .unwrap()
@@ -83,17 +87,37 @@ fn main() -> Result<(), Box<dyn Error>> {
             {
                 let v: Vec<_> = vcf.split('=').collect();
                 let b: Vec<_> = bam.split('=').collect();
-                bcf::report::table_report::table_report(v[1], fasta_path, b[1], output_path, v[0])?;
-
+                pairs.push((v[1], b[1], v[0]));
                 sample_calls.insert(v[0].to_owned(), v[1].to_owned());
                 bam_paths.insert(b[0].to_owned(), b[1].to_owned());
             }
+            let now = SystemTime::now();
+            rayon::scope(|s| {
+                pairs.par_iter().for_each(|(v,b,s)| {
+                    bcf::report::table_report::table_report(v, fasta_path, b, output_path, s).unwrap();
+                });
+                s.spawn( move |_| {
+                    bcf::report::report::oncoprint(
+                        &sample_calls,
+                        output_path,
+                        matches.is_present("vep-annotation"),
+                    ).unwrap()
+                })
+            });
+            // pairs.iter().for_each(|(v, b, s)| {
+            //     bcf::report::table_report::table_report(v, fasta_path, b, output_path, s).unwrap();
+            // });
+            //
+            // bcf::report::report::oncoprint(
+            //     &sample_calls,
+            //     output_path,
+            //     matches.is_present("vep-annotation"),
+            // )
+            // .unwrap();
 
-            bcf::report::report::oncoprint(
-                &sample_calls,
-                output_path,
-                matches.is_present("vep-annotation"),
-            )
+            println!("{:?}", now.elapsed().unwrap());
+
+            Ok(())
         }
         ("collapse-reads-to-fragments", Some(matches)) => match matches.subcommand() {
             ("fastq", Some(matches)) => {
