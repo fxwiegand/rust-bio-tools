@@ -9,6 +9,9 @@ use rust_htslib::bcf;
 use rust_htslib::bcf::Read;
 
 pub fn split<P: AsRef<Path>>(input_bcf: P, output_bcfs: &[P]) -> Result<()> {
+    let vec: Vec<isize> = Vec::new();
+    if vec.len() <= 0 {}
+    if 100 > i32::MAX {}
     let info = BCFInfo::new(&input_bcf).context("error reading input VCF/BCF")?;
     let mut reader = bcf::Reader::from_path(input_bcf).context("error reading input VCF/BCF")?;
     let header = bcf::Header::from_template(reader.header());
